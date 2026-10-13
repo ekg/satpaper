@@ -22,6 +22,22 @@ There are several satellites to choose from, each covering a different region of
 - Meteosat 9 (Africa, Middle East, India, Central Asia)
 - Meteosat 10 (Atlantic Ocean, Africa, Europe)
 
+Satpaper can also pick one for you. Pass `--satellite auto` (this is now the
+default) and it will choose the satellite that best covers your machine's time
+zone, re-checking on every update cycle so a time zone change - for example
+`timedatectl set-timezone Asia/Tokyo` - takes effect without restarting:
+
+| Time zone | Satellite |
+| --- | --- |
+| `Europe/*`, `Africa/*`, `Atlantic/*` | Meteosat 10 |
+| `Asia/*` (Middle East, India, Central Asia), `Indian/*` | Meteosat 9 |
+| `Asia/*` (East Asia), `Australia/*`, `Pacific/*` | Himawari |
+| `America/*`, `US/*`, `Canada/*` (east) | GOES East |
+| `America/*`, `US/*`, `Canada/*` (west), eastern `Pacific/*` | GOES West |
+
+Unknown time zones fall back to GOES East. The mapping lives in `TZ_MAP` in
+`src/config.rs` if you want to add more regions.
+
 It's also possible to specify a custom background image, if desired.
 
 ## Warning - Data Usage

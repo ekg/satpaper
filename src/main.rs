@@ -35,11 +35,44 @@ fn main() -> Result<()> {
 }
 
 fn update_wallpaper() -> Result<()> {
-    let config = Config::parse();
-    
+    let mut config = Config::parse();
+
+    // With `auto`, the satellite is derived from the system time zone. Resolve
+    // it once up front so the rest of the loop always sees a concrete value,
+    // then keep re-checking each cycle so changing the time zone takes effect
+    // without a restart.
+    let auto = config.satellite == Satellite::Auto;
+    config.satellite = config.satellite.resolved();
+
+    if auto {
+        log::info!(
+            "Using satellite {} (auto; system time zone: {}).",
+            config.satellite.id(),
+            config::system_time_zone().as_deref().unwrap_or("unknown"),
+        );
+    } else {
+        log::info!("Using satellite {}.", config.satellite.id());
+    }
+
     let mut timestamp = None;
     
     loop {
+        if auto {
+            let detected = Satellite::from_system_timezone();
+
+            if detected != config.satellite {
+                log::info!(
+                    "Time zone changed ({}) - switching satellite from {} to {}.",
+                    config::system_time_zone().as_deref().unwrap_or("unknown"),
+                    config.satellite.id(),
+                    detected.id(),
+                );
+                config.satellite = detected;
+                // Timestamps are per-satellite, so force a fresh composite.
+                timestamp = None;
+            }
+        }
+
         log::debug!("Checking timestamp...");
 
         // Run the check in a watched thread so that a wedged network call
