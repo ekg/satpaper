@@ -22,6 +22,26 @@ const SLIDER_PRODUCT: &str = "geocolor";
 
 const TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Shared HTTP agent with explicit timeouts at every layer. The overall
+/// request timeout alone does not cover DNS resolution, so connect/read/write
+/// timeouts are set as well; the watchdog in `main` backstops anything that
+/// still manages to wedge.
+fn agent() -> ureq::Agent {
+    static AGENT: OnceLock<ureq::Agent> = OnceLock::new();
+
+    AGENT
+        .get_or_init(|| {
+            AgentBuilder::new()
+                .timeout_connect(Duration::from_secs(10))
+                .timeout_read(Duration::from_secs(30))
+                .timeout_write(Duration::from_secs(30))
+                .timeout(TIMEOUT)
+                .user_agent("satpaper")
+                .build()
+        })
+        .clone()
+}
+
 pub fn composite_latest_image(config: &Config) -> Result<bool> {
     download(config)
         .and_then(|image| { composite(config, image)?; Ok(true) })
@@ -35,11 +55,7 @@ pub fn composite_latest_image(config: &Config) -> Result<bool> {
 fn download(config: &Config) -> Result<Image<Box<[u8]>>> {
     let tile_count = config.satellite.tile_count();
 
-    let agent = AgentBuilder::new()
-        .timeout(TIMEOUT)
-        .user_agent("satpaper")
-        .build();
-
+    let http = agent();
     let time = Time::fetch(config)?;
     let (year, month, day) = Date::fetch(config)?.split();
 
@@ -63,7 +79,7 @@ fn download(config: &Config) -> Result<Image<Box<[u8]>>> {
 
             log::info!("Scraping tile at ({x}, {y}).");
             
-            let resp = agent
+            let resp = http
                 .get(&url)
                 .call()?;
 
@@ -293,7 +309,8 @@ impl Time {
             config.satellite.id()
         );
         
-        let json = ureq::get(&url)
+        let json = agent()
+            .get(&url)
             .timeout(TIMEOUT)
             .call()?
             .into_reader();
@@ -320,7 +337,8 @@ impl Date {
             config.satellite.id()
         );
 
-        let json = ureq::get(&url)
+        let json = agent()
+            .get(&url)
             .timeout(TIMEOUT)
             .call()?
             .into_reader();
